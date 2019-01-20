@@ -1,4 +1,4 @@
-#include "fs.h"
+#include "fs_int.h"
 
 #include "mount.h"
 

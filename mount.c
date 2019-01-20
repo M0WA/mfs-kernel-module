@@ -3,7 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/fs.h>
 
-#include "superblock.h"
+#include "superblock_int.h"
 
 struct dentry *mfs_mount(struct file_system_type *type, int flags, char const *dev, void *data)
 {

@@ -1,4 +1,4 @@
-#include "superblock.h"
+#include "superblock_int.h"
 
 #include <linux/kernel.h>
 #include <linux/time.h>
@@ -9,7 +9,7 @@
 #include <linux/seq_file.h>
 #include <linux/buffer_head.h>
 
-#include "fs.h"
+#include "fs_int.h"
 
 /*
 struct super_operations {
@@ -51,8 +51,8 @@ static void mfs_put_super(struct super_block *sb)
 {
     pr_info("Destroying mfs super block\n");
     if(sb->s_fs_info) {
-        kfree(sb->s_fs_info);
-    }
+        kfree(sb->s_fs_info); }
+    pr_info("Destroyed mfs super block\n");
 	//kill_block_super(sb);
 }
 
@@ -70,11 +70,13 @@ static const struct super_operations mfs_super_ops = {
 
 enum {
 	Opt_mode,
+    Opt_blocksize,
 	Opt_err
 };
 
 static const match_table_t tokens = {
-	{Opt_mode, "mode=%o"},
+	{Opt_mode,      "mode=%o"},
+	{Opt_blocksize, "blocksize=%ul"},
 	{Opt_err, NULL}
 };
 
@@ -98,36 +100,42 @@ static int mfs_parse_options(char *data, struct mfs_mount_opts *opts)
 				return -EINVAL;
 			opts->mode = option & S_IALLUGO;
 			break;
-		/*
-		 * We might like to report bad mount options here
-		 */
+        case Opt_err:
+        default:
+            pr_warn("unknown argument for mfs module: %s\n",p);
+            break;
 		}
 	}
 
 	return 0;
 }
 
-static int mfs_read_disk_superblock(struct super_block *sb, struct buffer_head *bh, struct mfs_super_block *sb_disk) 
+static int mfs_read_disk_superblock(struct super_block **sb, struct buffer_head **bh, struct mfs_super_block **sb_disk)
 {
     int err = 0;
 
-    bh = sb_bread(sb, MFS_SUPERBLOCK_POS);
-    if(unlikely(!bh)) {
+    *bh = __bread_gfp((*sb)->s_bdev, MFS_SUPERBLOCK_POS, MFS_SUPERBLOCK_SIZE, __GFP_MOVABLE);
+    if(unlikely(!*bh)) {
         pr_err("Could not read superblock for mfs\n");
         return -EINVAL;
     } else {
         pr_info("Read superblock for mfs\n");
     }
-
-    sb_disk = (struct mfs_super_block *)bh->b_data;
-    if(unlikely(sb_disk->magic != MFS_MAGIC_NUMBER)) {
-        pr_err("Invalid magic number for mfs, is: 0x%08llx, expected: 0x%08x\n",sb_disk->magic, MFS_MAGIC_NUMBER);
+    
+    *sb_disk = &((union mfs_padded_super_block *)(*bh)->b_data)->sb;
+    if(unlikely((*sb_disk)->magic != MFS_MAGIC_NUMBER)) {
+        pr_err("Invalid magic number for mfs, is: 0x%08llx, expected: 0x%08llx\n",(*sb_disk)->magic, MFS_MAGIC_NUMBER);
+        err = -EINVAL;
+        goto release;
+    }
+    if(unlikely((*sb_disk)->version != MFS_VERSION)) {
+        pr_err("Invalid version for mfs, is: 0x%08llx, expected: 0x%08llx\n",(*sb_disk)->version, MFS_MAGIC_NUMBER);
         err = -EINVAL;
         goto release;
     }
 
 release:
-    brelse(bh);
+    brelse(*bh);
     return err;
 }
 
@@ -137,14 +145,12 @@ static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi)
 
     *fsi = kzalloc(sizeof(struct mfs_fs_info), GFP_KERNEL);
 	if (unlikely(!*fsi)) {
-        return -ENOMEM;
-    }
+        return -ENOMEM; }
 
     if(likely(data)) {
         err = mfs_parse_options(data, &(*fsi)->mount_opts);
         if (unlikely(err != 0)) {
-            return -EINVAL;
-        }
+            return -EINVAL; }
     }
     return 0;
 }
@@ -153,19 +159,17 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
 {
     struct mfs_fs_info *fsi;
     struct inode *root;
+    struct buffer_head *bh;
+    struct mfs_super_block *sb_disk;
     int err;
-    struct buffer_head *bh = NULL;
-    struct mfs_super_block *sb_disk = NULL;
     
-    err = mfs_read_disk_superblock(sb, bh, sb_disk);
+    err = mfs_read_disk_superblock(&sb, &bh, &sb_disk);
     if(unlikely(err != 0)) {
-        return err;
-    }
+        return err; }
 
     err = mfs_create_fs_info((char *)data, &fsi);
-	if (unlikely(err != 0)){
-		return err;
-    }
+	if (unlikely(err != 0)) {
+		return err; }
 	sb->s_fs_info = fsi;
 
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
@@ -195,6 +199,7 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     }
 
 release:
-    brelse(bh);
+    if(err != 0) {
+        brelse(bh); }
     return err;
 }

@@ -3,7 +3,7 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 
-#include "fs.h"
+#include "fs_int.h"
 
 static int __init init_mod(void)
 {
