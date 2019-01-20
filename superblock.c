@@ -52,7 +52,6 @@ static void mfs_put_super(struct super_block *sb)
     pr_info("Destroying mfs super block\n");
     if(sb->s_fs_info) {
         kfree(sb->s_fs_info); }
-    pr_info("Destroyed mfs super block\n");
 	//kill_block_super(sb);
 }
 
@@ -132,10 +131,15 @@ static int mfs_read_disk_superblock(struct super_block **sb, struct buffer_head 
         pr_err("Invalid version for mfs, is: 0x%08llx, expected: 0x%08llx\n",(*sb_disk)->version, MFS_MAGIC_NUMBER);
         err = -EINVAL;
         goto release;
+    } else {
+        pr_info("Found mfs v%ul.%ul, blocksize: %llu \n",MFS_GET_MAJOR_VERSION((*sb_disk)->version),MFS_GET_MINOR_VERSION((*sb_disk)->version), MFS_MAGIC_NUMBER);
     }
 
 release:
-    brelse(*bh);
+    if(err != 0 && *bh) {
+        brelse(*bh);
+        *bh = 0;
+    }
     return err;
 }
 
@@ -159,9 +163,9 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
 {
     struct mfs_fs_info *fsi;
     struct inode *root;
-    struct buffer_head *bh;
     struct mfs_super_block *sb_disk;
     int err;
+    struct buffer_head *bh = NULL;
     
     err = mfs_read_disk_superblock(&sb, &bh, &sb_disk);
     if(unlikely(err != 0)) {
@@ -199,7 +203,7 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     }
 
 release:
-    if(err != 0) {
+    if(err != 0 && bh) {
         brelse(bh); }
     return err;
 }
