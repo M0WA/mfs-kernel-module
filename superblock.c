@@ -10,6 +10,7 @@
 #include <linux/buffer_head.h>
 
 #include "fs_int.h"
+#include "inode_int.h"
 
 /*
 struct super_operations {
@@ -118,7 +119,7 @@ static int mfs_read_disk_superblock(struct super_block **sb, struct buffer_head 
         pr_err("Could not read superblock for mfs\n");
         return -EINVAL;
     } else {
-        pr_info("Read superblock for mfs\n");
+        pr_debug("Read superblock for mfs\n");
     }
     
     *sb_disk = &((union mfs_padded_super_block *)(*bh)->b_data)->sb;
@@ -132,7 +133,7 @@ static int mfs_read_disk_superblock(struct super_block **sb, struct buffer_head 
         err = -EINVAL;
         goto release;
     } else {
-        pr_info("Found mfs v%ul.%ul, blocksize: %llu \n",MFS_GET_MAJOR_VERSION((*sb_disk)->version),MFS_GET_MINOR_VERSION((*sb_disk)->version), MFS_MAGIC_NUMBER);
+        pr_info("Found mfs v%llu.%llu, blocksize: %llu \n",MFS_GET_MAJOR_VERSION(((*sb_disk)->version)),MFS_GET_MINOR_VERSION(((*sb_disk)->version)), (*sb_disk)->block_size);
     }
 
 release:
@@ -193,6 +194,8 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     root->i_ino = 0;
     root->i_sb = sb;    
     root->i_atime = root->i_mtime = root->i_ctime = current_time(root);
+    root->i_op = &mfs_inode_ops;
+    root->i_fop = &mfs_dir_operations;
     inode_init_owner(root, NULL, S_IFDIR | fsi->mount_opts.mode);
 
     sb->s_root = d_make_root(root);
