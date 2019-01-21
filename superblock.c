@@ -70,13 +70,11 @@ static const struct super_operations mfs_super_ops = {
 
 enum {
 	Opt_mode,
-    Opt_blocksize,
 	Opt_err
 };
 
 static const match_table_t tokens = {
 	{Opt_mode,      "mode=%o"},
-	{Opt_blocksize, "blocksize=%ul"},
 	{Opt_err, NULL}
 };
 
@@ -144,7 +142,7 @@ release:
     return err;
 }
 
-static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi) 
+static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi,struct mfs_super_block *sb) 
 {
     int err;
 
@@ -157,6 +155,7 @@ static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi)
         if (unlikely(err != 0)) {
             return -EINVAL; }
     }
+    (*fsi)->sb = sb;
     return 0;
 }
 
@@ -172,14 +171,13 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     if(unlikely(err != 0)) {
         return err; }
 
-    err = mfs_create_fs_info((char *)data, &fsi);
+    err = mfs_create_fs_info((char *)data, &fsi,sb_disk);
 	if (unlikely(err != 0)) {
 		return err; }
 	sb->s_fs_info = fsi;
 
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
-	sb->s_blocksize	= PAGE_SIZE;
-	sb->s_blocksize_bits = PAGE_SHIFT;
+	sb->s_blocksize	= sb_disk->block_size;
     sb->s_magic = MFS_MAGIC_NUMBER;
     sb->s_op = &mfs_super_ops;
     sb->s_time_gran = 1;
