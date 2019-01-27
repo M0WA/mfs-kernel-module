@@ -8,7 +8,7 @@
 static int __init init_mod(void)
 {
     int res = 0;
-	pr_info("Loading mfs module\n");
+    pr_info("Loading mfs module\n");
 
     res = register_filesystem(&mfs_type);
     if(unlikely(res != 0)) {
@@ -17,7 +17,7 @@ static int __init init_mod(void)
         pr_info("Registered mfs file-system\n");
     }
 
-	return res;
+    return res;
 }
 
 module_init(init_mod);

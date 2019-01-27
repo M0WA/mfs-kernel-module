@@ -8,7 +8,7 @@
 static void __exit shutdown_mod(void)
 {
     int res = 0;
-	pr_info("Unloading mfs module\n");
+    pr_info("Unloading mfs module\n");
     res = unregister_filesystem(&mfs_type);
     if(unlikely(res != 0)) {
         pr_err("Unloading mfs module failed\n");
