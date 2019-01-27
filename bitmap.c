@@ -7,7 +7,7 @@
 #include <linux/slab.h>
 #include <linux/bitops.h>
 
-int mfs_load_bitmap(struct super_block *sb,uint64_t pos,struct mfs_bitmap *bitmap,uint64_t bits) 
+int mfs_load_bitmap(struct super_block *sb,uint64_t pos,struct mfs_bitmap *bitmap,uint64_t bits)
 {
     struct buffer_head *bh;
     uint64_t long_count = BITS_TO_LONGS(bits);
@@ -34,7 +34,7 @@ int mfs_load_bitmap(struct super_block *sb,uint64_t pos,struct mfs_bitmap *bitma
             err = -EINVAL;
             goto release;
         }
-        
+
         memcpy(&(buf[read]),bh->b_data, ( ((bytes-read) < sb->s_bdev->bd_block_size) ? (bytes-read) : sb->s_bdev->bd_block_size) );
 
         read += sb->s_bdev->bd_block_size;
@@ -42,8 +42,8 @@ int mfs_load_bitmap(struct super_block *sb,uint64_t pos,struct mfs_bitmap *bitma
         __brelse(bh);
     }
     pr_debug("Read bitmap for mfs at byte pos: %llu, bytes: %zu\n",pos,bytes);
-    
-/*  
+
+/*
     bitmap_copy(bitmap->map,(const long unsigned int*)bh->b_data,bits);
 */
 
