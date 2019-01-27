@@ -11,6 +11,8 @@
 
 #include "fs_int.h"
 #include "inode_int.h"
+#include "freemap.h"
+#include "inodemap.h"
 
 /*
 struct super_operations {
@@ -52,7 +54,12 @@ static void mfs_put_super(struct super_block *sb)
 {
     pr_info("Destroying mfs super block\n");
     if(sb->s_fs_info) {
+        if(((struct mfs_fs_info*)sb->s_fs_info)->sb) {
+            kfree(((struct mfs_fs_info*)sb->s_fs_info)->sb); }
         kfree(sb->s_fs_info); }
+    mfs_destroy_inodemap();
+    mfs_destroy_freemap();
+
 	//kill_block_super(sb);
 }
 
@@ -108,36 +115,44 @@ static int mfs_parse_options(char *data, struct mfs_mount_opts *opts)
 	return 0;
 }
 
-static int mfs_read_disk_superblock(struct super_block **sb, struct buffer_head **bh, struct mfs_super_block **sb_disk)
+static int mfs_read_disk_superblock(struct super_block *sb, struct mfs_super_block **sb_disk)
 {
+    struct buffer_head *bh;
     int err = 0;
+    struct mfs_super_block *tmp;
+    *sb_disk = NULL;
 
-    *bh = __bread_gfp((*sb)->s_bdev, MFS_SUPERBLOCK_POS, MFS_SUPERBLOCK_SIZE, __GFP_MOVABLE);
-    if(unlikely(!*bh)) {
+    bh = __bread_gfp(sb->s_bdev, MFS_SUPERBLOCK_POS, MFS_SUPERBLOCK_SIZE, __GFP_MOVABLE);
+    if(unlikely(!bh)) {
         pr_err("Could not read superblock for mfs\n");
         return -EINVAL;
     } else {
         pr_debug("Read superblock for mfs\n");
     }
-    
-    *sb_disk = &((union mfs_padded_super_block *)(*bh)->b_data)->sb;
-    if(unlikely((*sb_disk)->magic != MFS_MAGIC_NUMBER)) {
-        pr_err("Invalid magic number for mfs, is: 0x%08llx, expected: 0x%08llx\n",(*sb_disk)->magic, MFS_MAGIC_NUMBER);
+    tmp = &((union mfs_padded_super_block *)bh->b_data)->sb;
+    if(unlikely(tmp->magic != MFS_MAGIC_NUMBER)) {
+        pr_err("Invalid magic number for mfs, is: 0x%08llx, expected: 0x%08llx\n",tmp->magic, MFS_MAGIC_NUMBER);
         err = -EINVAL;
         goto release;
     }
-    if(unlikely((*sb_disk)->version != MFS_VERSION)) {
-        pr_err("Invalid version for mfs, is: 0x%08llx, expected: 0x%08llx\n",(*sb_disk)->version, MFS_MAGIC_NUMBER);
+    if(unlikely(tmp->version != MFS_VERSION)) {
+        pr_err("Invalid version for mfs, is: 0x%08llx, expected: 0x%08llx\n",tmp->version, MFS_VERSION);
         err = -EINVAL;
         goto release;
     } else {
-        pr_info("Found mfs v%llu.%llu, blocksize: %llu \n",MFS_GET_MAJOR_VERSION(((*sb_disk)->version)),MFS_GET_MINOR_VERSION(((*sb_disk)->version)), (*sb_disk)->block_size);
+        pr_info("Found mfs v%llu.%llu, blocks: %llu, blocksize: %u, size: %llu KB \n",
+            MFS_GET_MAJOR_VERSION((tmp->version)), MFS_GET_MINOR_VERSION((tmp->version)),
+            (tmp)->block_count,
+            (tmp)->block_size, 
+            ((tmp)->block_size * (tmp)->block_count)/1024 );
     }
 
+    *sb_disk = kmalloc(sizeof(struct mfs_super_block), GFP_KERNEL);
+    memcpy(*sb_disk,tmp,sizeof(struct mfs_super_block));
+
 release:
-    if(err != 0 && *bh) {
-        brelse(*bh);
-        *bh = 0;
+    if(bh) {
+        __brelse(bh);
     }
     return err;
 }
@@ -165,15 +180,21 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     struct inode *root;
     struct mfs_super_block *sb_disk;
     int err;
-    struct buffer_head *bh = NULL;
     
-    err = mfs_read_disk_superblock(&sb, &bh, &sb_disk);
+    err = mfs_read_disk_superblock(sb, &sb_disk);
     if(unlikely(err != 0)) {
         return err; }
 
+    err = mfs_load_freemap(sb->s_bdev,sb_disk->block_count);
+	if (unlikely(err != 0)) {
+        goto release; }
+    err = mfs_load_inodemap(sb->s_bdev,sb_disk->block_count);
+	if (unlikely(err != 0)) {
+        goto release; }
+
     err = mfs_create_fs_info((char *)data, &fsi,sb_disk);
 	if (unlikely(err != 0)) {
-		return err; }
+        goto release; }
 	sb->s_fs_info = fsi;
 
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
@@ -204,7 +225,5 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     }
 
 release:
-    if(err != 0 && bh) {
-        brelse(bh); }
     return err;
 }

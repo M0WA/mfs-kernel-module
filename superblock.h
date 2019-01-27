@@ -7,15 +7,8 @@
 struct mfs_super_block {
     uint64_t version;
     uint64_t magic;
-    uint64_t block_size;
-
-    /* FIXME: This should be moved to the inode store and not part of the sb */
-    uint64_t inodes_count;
-
-    uint64_t free_blocks;
-
-    /** FIXME: move this into separate struct */
-    //struct journal_s *journal;        
+    uint32_t block_size;
+    uint64_t block_count;
 };
 
 union mfs_padded_super_block { 
