@@ -7,12 +7,12 @@ static struct mfs_bitmap freemap = {
     .bits = 0,
 };
 
-int mfs_load_freemap(struct block_device *bdev,uint64_t blocks) 
+int mfs_load_freemap(struct super_block *sb,uint64_t blockcount) 
 {
-    return mfs_load_bitmap(bdev,MFS_FREEMAP_POS,&freemap,blocks);
+    return mfs_load_bitmap(sb,MFS_FREEMAP_POS,&freemap,blockcount);
 }
 
-int mfs_save_freemap(struct block_device *bdev) 
+int mfs_save_freemap(struct super_block *sb) 
 {
     return 0;
 }

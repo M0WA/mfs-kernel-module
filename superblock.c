@@ -55,8 +55,10 @@ static void mfs_put_super(struct super_block *sb)
     pr_info("Destroying mfs super block\n");
     if(sb->s_fs_info) {
         if(((struct mfs_fs_info*)sb->s_fs_info)->sb) {
-            kfree(((struct mfs_fs_info*)sb->s_fs_info)->sb); }
-        kfree(sb->s_fs_info); }
+            kfree(((struct mfs_fs_info*)sb->s_fs_info)->sb); 
+        }
+        kfree(sb->s_fs_info); 
+    }
     mfs_destroy_inodemap();
     mfs_destroy_freemap();
 
@@ -151,7 +153,7 @@ static int mfs_read_disk_superblock(struct super_block *sb, struct mfs_super_blo
     memcpy(*sb_disk,tmp,sizeof(struct mfs_super_block));
 
 release:
-    if(bh) {
+    if(likely(bh)) {
         __brelse(bh);
     }
     return err;
@@ -185,12 +187,11 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     if(unlikely(err != 0)) {
         return err; }
 
-    err = mfs_load_freemap(sb->s_bdev,sb_disk->block_count);
-	if (unlikely(err != 0)) {
-        goto release; }
-    err = mfs_load_inodemap(sb->s_bdev,sb_disk->block_count);
-	if (unlikely(err != 0)) {
-        goto release; }
+    if(unlikely(sb_set_blocksize(sb, sb_disk->block_size) != sb_disk->block_size)) {
+        pr_err("could not set blocksize\n");
+        err = -EINVAL;
+        goto release;
+    }
 
     err = mfs_create_fs_info((char *)data, &fsi,sb_disk);
 	if (unlikely(err != 0)) {
@@ -202,6 +203,13 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     sb->s_magic = MFS_MAGIC_NUMBER;
     sb->s_op = &mfs_super_ops;
     sb->s_time_gran = 1;
+
+    err = mfs_load_freemap(sb,sb_disk->block_count);
+	if (unlikely(err != 0)) {
+        goto release; }
+    err = mfs_load_inodemap(sb,sb_disk->block_count);
+	if (unlikely(err != 0)) {
+        goto release; }
 
     root = new_inode(sb);
     if (unlikely(!root)) {
