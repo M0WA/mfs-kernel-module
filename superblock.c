@@ -13,56 +13,21 @@
 #include "inode_int.h"
 #include "freemap.h"
 #include "inodemap.h"
+#include "dir.h"
 
-/*
-struct super_operations {
-    struct inode *(*alloc_inode)(struct super_block *sb);
-    void (*destroy_inode)(struct inode *);
-
-    void (*dirty_inode) (struct inode *, int flags);
-    int (*write_inode) (struct inode *, struct writeback_control *wbc);
-    int (*drop_inode) (struct inode *);
-    void (*evict_inode) (struct inode *);
-    void (*put_super) (struct super_block *);
-    int (*sync_fs)(struct super_block *sb, int wait);
-    int (*freeze_super) (struct super_block *);
-    int (*freeze_fs) (struct super_block *);
-    int (*thaw_super) (struct super_block *);
-    int (*unfreeze_fs) (struct super_block *);
-    int (*statfs) (struct dentry *, struct kstatfs *);
-    int (*remount_fs) (struct super_block *, int *, char *);
-    void (*umount_begin) (struct super_block *);
-
-    int (*show_options)(struct seq_file *, struct dentry *);
-    int (*show_devname)(struct seq_file *, struct dentry *);
-    int (*show_path)(struct seq_file *, struct dentry *);
-    int (*show_stats)(struct seq_file *, struct dentry *);
-#ifdef CONFIG_QUOTA
-    ssize_t (*quota_read)(struct super_block *, int, char *, size_t, loff_t);
-    ssize_t (*quota_write)(struct super_block *, int, const char *, size_t, loff_t);
-    struct dquot **(*get_dquots)(struct inode *);
-#endif
-    int (*bdev_try_to_free_page)(struct super_block*, struct page*, gfp_t);
-    long (*nr_cached_objects)(struct super_block *,
-                  struct shrink_control *);
-    long (*free_cached_objects)(struct super_block *,
-                    struct shrink_control *);
-};
-*/
+struct mfs_super_block mfs_sb;
 
 static void mfs_put_super(struct super_block *sb)
 {
     pr_info("Destroying mfs super block\n");
     if(sb->s_fs_info) {
-        if(((struct mfs_fs_info*)sb->s_fs_info)->sb) {
-            kfree(((struct mfs_fs_info*)sb->s_fs_info)->sb);
-        }
-        kfree(sb->s_fs_info);
-    }
+        kfree(sb->s_fs_info); }
     mfs_destroy_inodemap();
     mfs_destroy_freemap();
+}
 
-    //kill_block_super(sb);
+static void mfs_destroy_inode(struct inode *inode)
+{
 }
 
 static int mfs_show_options(struct seq_file *m, struct dentry *root)
@@ -73,8 +38,9 @@ static int mfs_show_options(struct seq_file *m, struct dentry *root)
 }
 
 static const struct super_operations mfs_super_ops = {
-    .put_super = mfs_put_super,
-    .show_options = mfs_show_options,
+    .put_super     = mfs_put_super,
+    .destroy_inode = mfs_destroy_inode,
+    .show_options  = mfs_show_options,
 };
 
 enum {
@@ -117,12 +83,11 @@ static int mfs_parse_options(char *data, struct mfs_mount_opts *opts)
     return 0;
 }
 
-static int mfs_read_disk_superblock(struct super_block *sb, struct mfs_super_block **sb_disk)
+static int mfs_read_disk_superblock(struct super_block *sb)
 {
     struct buffer_head *bh;
     int err = 0;
     struct mfs_super_block *tmp;
-    *sb_disk = NULL;
 
     bh = __bread_gfp(sb->s_bdev, MFS_SUPERBLOCK_POS, MFS_SUPERBLOCK_SIZE, __GFP_MOVABLE);
     if(unlikely(!bh)) {
@@ -149,8 +114,7 @@ static int mfs_read_disk_superblock(struct super_block *sb, struct mfs_super_blo
             ((tmp)->block_size * (tmp)->block_count)/1024 );
     }
 
-    *sb_disk = kmalloc(sizeof(struct mfs_super_block), GFP_KERNEL);
-    memcpy(*sb_disk,tmp,sizeof(struct mfs_super_block));
+    memcpy(&mfs_sb,tmp,sizeof(struct mfs_super_block));
 
 release:
     if(likely(bh)) {
@@ -159,7 +123,7 @@ release:
     return err;
 }
 
-static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi,struct mfs_super_block *sb)
+static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi)
 {
     int err;
 
@@ -172,7 +136,7 @@ static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi,struct mfs_su
         if (unlikely(err != 0)) {
             return -EINVAL; }
     }
-    (*fsi)->sb = sb;
+    (*fsi)->sb = &mfs_sb;
     return 0;
 }
 
@@ -180,34 +144,35 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
 {
     struct mfs_fs_info *fsi;
     struct inode *root;
-    struct mfs_super_block *sb_disk;
     int err;
 
-    err = mfs_read_disk_superblock(sb, &sb_disk);
+    memset(&mfs_sb,0,sizeof(struct mfs_super_block));
+
+    err = mfs_read_disk_superblock(sb);
     if(unlikely(err != 0)) {
         return err; }
 
-    if(unlikely(sb_set_blocksize(sb, sb_disk->block_size) != sb_disk->block_size)) {
+    if(unlikely(sb_set_blocksize(sb, mfs_sb.block_size) != mfs_sb.block_size)) {
         pr_err("could not set blocksize\n");
         err = -EINVAL;
         goto release;
     }
 
-    err = mfs_create_fs_info((char *)data, &fsi,sb_disk);
+    err = mfs_create_fs_info((char *)data, &fsi);
     if (unlikely(err != 0)) {
         goto release; }
     sb->s_fs_info = fsi;
 
     sb->s_maxbytes = MAX_LFS_FILESIZE;
-    sb->s_blocksize = sb_disk->block_size;
+    sb->s_blocksize = mfs_sb.block_size;
     sb->s_magic = MFS_MAGIC_NUMBER;
     sb->s_op = &mfs_super_ops;
     sb->s_time_gran = 1;
 
-    err = mfs_load_freemap(sb,sb_disk->block_count);
+    err = mfs_load_freemap(sb);
     if (unlikely(err != 0)) {
         goto release; }
-    err = mfs_load_inodemap(sb,sb_disk->block_count);
+    err = mfs_load_inodemap(sb);
     if (unlikely(err != 0)) {
         goto release; }
 

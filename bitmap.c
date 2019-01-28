@@ -61,6 +61,15 @@ int mfs_save_bitmap(struct super_block *sb,uint64_t pos,struct mfs_bitmap *bitma
     return 0;
 }
 
+void mfs_set_bit_bitmap(struct mfs_bitmap *bitmap,uint64_t bit,int set)
+{
+    if(set) {
+        set_bit(bit, bitmap->map);
+    } else {
+        clear_bit(bit, bitmap->map);
+    }
+}
+
 void mfs_destroy_bitmap(struct mfs_bitmap *bitmap)
 {
     if(bitmap->map) {
