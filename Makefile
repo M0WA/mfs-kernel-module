@@ -6,7 +6,7 @@ TESTIMAGENAME := mfs-test-image
 TESTIMAGESIZE := 1048576
 
 obj-m += $(MODULE_FILENAME).o
-$(MODULE_FILENAME)-objs := init.o shutdown.o module.o bitmap.o fs.o mount.o superblock.o inode.o freemap.o inodemap.o dir.o file.o utils.o
+$(MODULE_FILENAME)-objs := init.o shutdown.o module.o bitmap.o fs.o mount.o superblock.o record.o inode.o freemap.o inodemap.o dir.o file.o utils.o
 
 all: clean module
 
@@ -68,7 +68,7 @@ test:
 	$(MAKE) test_insmod_fs 
 	$(MAKE) test_mount_fs 
 	$(MAKE) test_mkdir
-	-$(MAKE) test_touch
+#	-$(MAKE) test_touch
 	-$(MAKE) test_ls
 	$(MAKE) test_cleanup
 	@echo kernel log output is

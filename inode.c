@@ -22,7 +22,52 @@ static int mfs_inode_mkdir(struct inode *dir, struct dentry *dentry, umode_t mod
 
 static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry *child_dentry, unsigned int flags)
 {
-    return NULL;
+    int err;
+    size_t child;
+    struct mfs_record record;
+    uint64_t *children = NULL;    
+    struct inode *i = NULL;
+    char *childname = NULL;
+    struct dentry *rc = NULL;
+    struct super_block *sb = parent_inode->i_sb;
+    struct mfs_inode *p_minode = MFS_INODE(parent_inode);
+
+    pr_info("Lookup inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
+
+    err = mfs_read_disk_record(sb, &record, &children, p_minode->record_block);
+    if(err != 0) {        
+        goto release;
+    }
+
+    for(child = 0; child < record.dir.children_inodes_count; child++) {
+        err = mfs_read_disk_inode(sb, &i, children[child]);
+        err = mfs_read_disk_record(sb, &record, NULL, MFS_INODE(i)->record_block);
+
+        switch(record.type) {
+        case MFS_DIR_RECORD:
+            childname = record.dir.name;
+            break;
+        case MFS_FILE_RECORD:
+            childname = record.file.name;
+            break;
+        default:
+            continue;
+        }
+
+        if( strncmp(child_dentry->d_name.name,childname,child_dentry->d_name.len) == 0 ) {
+            pr_info("Found inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
+            rc = d_splice_alias(i,child_dentry);
+            break;
+        }
+
+        kfree(i);
+        i = NULL;
+    }
+    
+release:
+    if(children) {
+        kfree(children); }
+    return rc;
 }
 
 static int mfs_inode_create(struct inode *dir, struct dentry *dentry, umode_t mode, bool excl)

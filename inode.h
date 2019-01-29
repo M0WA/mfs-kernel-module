@@ -7,6 +7,8 @@
 extern const struct inode_operations mfs_inode_ops;
 
 int mfs_read_disk_inode(struct super_block *sb, struct inode **i, uint64_t block);
+
+#define MFS_INODE(x) ((struct mfs_inode*)(x)->i_private)
 #else
 #include <stdint.h>
 #endif
