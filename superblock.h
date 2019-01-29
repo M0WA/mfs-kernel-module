@@ -36,6 +36,7 @@ union mfs_padded_super_block {
 
 int mfs_fill_sb(struct super_block *sb, void *data, int silent);
 int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t len,void *data);
+uint64_t mfs_get_next_inode_no(struct super_block *sb);
 void mfs_init_mounts(void);
 
 #endif

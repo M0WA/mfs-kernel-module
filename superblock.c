@@ -15,21 +15,26 @@
 #include "inodemap.h"
 #include "dir.h"
 
-#define UINT8_MAX 255
+#define MAX_MOUNTS 255
 
-struct mfs_fs_info mounts[UINT8_MAX];
+struct mfs_fs_info mounts[MAX_MOUNTS];
 
 static void mfs_put_super(struct super_block *sb)
 {
     pr_info("Destroying mfs super block\n");
-    if(sb->s_fs_info) {
-        kfree(sb->s_fs_info); }
+
     mfs_destroy_inodemap();
     mfs_destroy_freemap();
 }
 
 static void mfs_destroy_inode(struct inode *inode)
 {
+    pr_info("Destroying mfs inode\n");
+
+    if(inode->i_private) {
+        kfree(inode->i_private);
+        inode->i_private = NULL;
+    }
 }
 
 static int mfs_show_options(struct seq_file *m, struct dentry *root)
@@ -115,7 +120,7 @@ static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi)
     int err;
     uint8_t m_id;
 
-    for(m_id = 0; m_id < UINT8_MAX; m_id++) {
+    for(m_id = 0; m_id < MAX_MOUNTS; m_id++) {
         if(mounts[m_id].in_use == 0) {
             break; }
     }
@@ -200,9 +205,7 @@ int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t
     int err = 0;
     unsigned char *buf = (unsigned char *)data;
     size_t blocklen = offset + len;
-    size_t count    = blocklen / sb->s_blocksize;
-    size_t rest     = blocklen % sb->s_blocksize;
-    size_t loops    = count + ( (rest != 0) ? 1 : 0 );    
+    size_t loops    = DIV_ROUND_UP(blocklen,sb->s_blocksize);
 
     for(i = 0; i <= loops; i++) {
         bh = sb_bread(sb, block + i);
@@ -232,7 +235,14 @@ int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t
     return err;
 }
 
+uint64_t mfs_get_next_inode_no(struct super_block *sb)
+{
+    uint64_t ino = MFS_SB(sb).next_ino;
+    MFS_SB(sb).next_ino++;
+    return ino;
+}
+
 void mfs_init_mounts(void)
 {
-    memset(mounts,0,sizeof(struct mfs_fs_info) * UINT8_MAX);
+    memset(mounts,0,sizeof(struct mfs_fs_info) * MAX_MOUNTS);
 }

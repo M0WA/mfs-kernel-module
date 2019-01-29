@@ -1,6 +1,7 @@
 #include "inode.h"
 
 #include <linux/fs.h>
+#include <linux/slab.h>
 
 #include "dir.h"
 #include "file.h"
@@ -36,10 +37,11 @@ const struct inode_operations mfs_inode_ops = {
 
 static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, umode_t mode) 
 {
+    struct mfs_inode m_inode;
     struct inode *inode;
     struct super_block *sb;
     int err = 0;
-    uint64_t ino;
+    sector_t block;
 
     if (!S_ISDIR(mode) && !S_ISREG(mode)) {
         pr_err("could not create %s, invalid mode\n", dentry->d_name.name);
@@ -47,18 +49,19 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, um
     }
 
     sb = dir->i_sb;
-    ino = mfs_reserve_freemap(sb,sizeof(struct mfs_inode));
+    block = mfs_reserve_freemap(sb,sizeof(struct mfs_inode));
+    m_inode.inode_no = mfs_get_next_inode_no(sb);
 
 	inode = new_inode(sb);
 	if (!inode) {
 		err = ENOMEM;
         goto release;
 	}
-
 	inode->i_sb = sb;
 	inode->i_op = &mfs_inode_ops;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
-	inode->i_ino = ino;
+	inode->i_ino = m_inode.inode_no;
+
 	if (S_ISDIR(mode)) {
 		inode->i_fop = &mfs_dir_operations;
 	} else if (S_ISREG(mode)) {
@@ -66,7 +69,7 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, um
 	}
 
 release:
-    if(err && ino) {
+    if(err && m_inode.inode_no) {
         //unreserve free blocks
         //unreserve inode
     }
@@ -76,12 +79,18 @@ release:
 int mfs_read_disk_inode(struct super_block *sb, struct inode **i, uint64_t block)
 {
     int err;
-    struct mfs_inode m_inode;
+    struct mfs_inode *m_inode;
     struct inode *tmp;
 
     *i = NULL;
 
-    err = mfs_read_blockdev(sb,block,0,sizeof(struct mfs_inode),&m_inode);
+    m_inode = kmalloc(sizeof(struct mfs_inode), GFP_KERNEL);
+    if (unlikely(!m_inode)) {
+        pr_err("mfs inode allocation failed\n");
+        return -ENOMEM;
+    }
+
+    err = mfs_read_blockdev(sb,block,0,sizeof(struct mfs_inode),m_inode);
     if(unlikely(err != 0)) {
         return err;
     }
@@ -92,14 +101,14 @@ int mfs_read_disk_inode(struct super_block *sb, struct inode **i, uint64_t block
         return -ENOMEM;
     }
 
-    tmp->i_ino = m_inode.inode_no;
+    tmp->i_ino = m_inode->inode_no;
     tmp->i_atime = current_time(tmp);
-    mfs_timet_to_timespec(m_inode.modified,&tmp->i_mtime);
-    mfs_timet_to_timespec(m_inode.created,&tmp->i_ctime);
+    mfs_timet_to_timespec(m_inode->modified,&tmp->i_mtime);
+    mfs_timet_to_timespec(m_inode->created,&tmp->i_ctime);
     tmp->i_op = &mfs_inode_ops;
     tmp->i_fop = &mfs_dir_operations;
-    //tmp->i_private = &m_inode;
-    inode_init_owner(tmp, NULL, m_inode.mode | MFS_FSINFO(sb)->mount_opts.mode);
+    tmp->i_private = m_inode;
+    inode_init_owner(tmp, NULL, m_inode->mode | MFS_FSINFO(sb)->mount_opts.mode);
 
     *i = tmp;
     return 0;

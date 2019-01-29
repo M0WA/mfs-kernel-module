@@ -16,17 +16,14 @@ int mfs_load_freemap(struct super_block *sb)
     return mfs_load_bitmap(sb,MFS_FREEMAP_POS,&freemap,MFS_SB(sb).block_count);
 }
 
-uint64_t mfs_reserve_freemap(struct super_block *sb,uint64_t bytes) 
+sector_t mfs_reserve_freemap(struct super_block *sb,uint64_t bytes) 
 {
-    uint64_t pos;
-    uint64_t blocks = bytes/sb->s_blocksize;
-    if( (bytes % MFS_SB(sb).block_size) != 0 ) {
-        blocks++; }
-
-    pos = bitmap_find_next_zero_area(freemap.map,freemap.bits,0,blocks,0);
-    bitmap_set(freemap.map,pos,blocks);
+    sector_t free_block;
+    uint64_t blocks = DIV_ROUND_UP(bytes,sb->s_blocksize);
+    free_block = bitmap_find_next_zero_area(freemap.map,freemap.bits,0,blocks,0);
+    bitmap_set(freemap.map,free_block,blocks);
     mfs_save_freemap(sb);
-    return pos;    
+    return free_block;    
 }
 
 int mfs_save_freemap(struct super_block *sb)
