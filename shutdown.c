@@ -3,7 +3,7 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 
-#include "fs_int.h"
+#include "fs.h"
 
 static void __exit shutdown_mod(void)
 {

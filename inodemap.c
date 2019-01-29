@@ -1,8 +1,9 @@
 #include "inodemap.h"
 
-#include "superblock_int.h"
+#include "superblock.h"
 #include "bitmap.h"
 #include "freemap.h"
+#include "fs.h"
 
 #include <linux/bitmap.h>
 
@@ -13,9 +14,7 @@ static struct mfs_bitmap inodemap = {
 
 int mfs_load_inodemap(struct super_block *sb) 
 {
-    uint64_t long_count = BITS_TO_LONGS(mfs_sb.block_count);
-    size_t bytes = long_count * sizeof(long unsigned int);
-    return mfs_load_bitmap(sb,MFS_FREEMAP_POS + bytes,&inodemap,mfs_sb.block_count);
+    return mfs_load_bitmap(sb,MFS_SB(sb).inodemap_block,&inodemap,MFS_SB(sb).block_count);
 }
 
 int mfs_save_inodemap(struct super_block *sb) 

@@ -2,8 +2,6 @@
 
 #include <linux/fs.h>
 
-#include "superblock_int.h"
-
 #define MFS_FREEMAP_POS MFS_SUPERBLOCK_POS + MFS_SUPERBLOCK_SIZE
 
 uint64_t mfs_reserve_freemap(struct super_block *sb,uint64_t bytes);

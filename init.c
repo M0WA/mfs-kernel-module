@@ -3,12 +3,15 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 
-#include "fs_int.h"
+#include "fs.h"
+#include "superblock.h"
 
 static int __init init_mod(void)
 {
     int res = 0;
     pr_info("Loading mfs module\n");
+
+    mfs_init_mounts();
 
     res = register_filesystem(&mfs_type);
     if(unlikely(res != 0)) {
