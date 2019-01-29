@@ -7,13 +7,13 @@
 #include <linux/uaccess.h>
 #include <linux/parser.h>
 #include <linux/seq_file.h>
-#include <linux/buffer_head.h>
 
 #include "fs.h"
 #include "inode.h"
 #include "freemap.h"
 #include "inodemap.h"
 #include "dir.h"
+#include "utils.h"
 
 #define MAX_MOUNTS 255
 
@@ -92,7 +92,7 @@ static int mfs_parse_options(char *data, struct mfs_mount_opts *opts)
 
 static int mfs_read_disk_superblock(struct super_block *sb,struct mfs_fs_info *fsi)
 {
-    int err = mfs_read_blockdev(sb,MFS_SUPERBLOCK_POS,0,MFS_SUPERBLOCK_SIZE,&fsi->sb);
+    int err = mfs_read_blockdev(sb,MFS_SUPERBLOCK_BLOCK,0,MFS_SUPERBLOCK_SIZE,&fsi->sb);
     if(unlikely(err != 0)) {
         return err;
     }
@@ -197,48 +197,16 @@ release:
     return err;
 }
 
-int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t len,void *data)
+int mfs_save_sb(struct super_block *sb)
 {
-    struct buffer_head *bh;
-    unsigned char *tmp;
-    size_t cpy, i;
-    int err = 0;
-    unsigned char *buf = (unsigned char *)data;
-    size_t blocklen = offset + len;
-    size_t loops    = DIV_ROUND_UP(blocklen,sb->s_blocksize);
-
-    for(i = 0; i <= loops; i++) {
-        bh = sb_bread(sb, block + i);
-        if(unlikely(!bh)) {
-            pr_err("error reading from block device: block %lu\n",block + i);
-            return -EINVAL; }
-
-        tmp = bh->b_data;        
-        cpy = sb->s_blocksize;
-
-        if(unlikely(offset != 0)) {
-            tmp += offset;
-            cpy -= offset;
-            offset = 0; }
-
-        if(unlikely(cpy > len)) {
-            cpy = len; }
-
-        memcpy(buf,tmp,cpy);
-
-        len -= cpy;
-        buf += cpy;
-
-        brelse(bh);
-    }
-
-    return err;
+    return mfs_write_blockdev(sb,MFS_SUPERBLOCK_BLOCK,0,sizeof(struct mfs_super_block),&(MFS_SB(sb)));
 }
 
 uint64_t mfs_get_next_inode_no(struct super_block *sb)
 {
     uint64_t ino = MFS_SB(sb).next_ino;
     MFS_SB(sb).next_ino++;
+    mfs_save_sb(sb);
     return ino;
 }
 

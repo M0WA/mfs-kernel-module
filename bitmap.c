@@ -7,6 +7,7 @@
 #include <linux/bitops.h>
 
 #include "superblock.h"
+#include "utils.h"
 
 int mfs_load_bitmap(struct super_block *sb,sector_t block,struct mfs_bitmap *bitmap,uint64_t bits)
 {
@@ -37,7 +38,8 @@ release:
 
 int mfs_save_bitmap(struct super_block *sb,sector_t block,struct mfs_bitmap *bitmap)
 {
-    return 0;
+    size_t mapsize = BITS_TO_LONGS(bitmap->bits) * sizeof(long unsigned int);
+    return mfs_write_blockdev(sb,block,0,mapsize,bitmap->map);
 }
 
 void mfs_set_bit_bitmap(struct mfs_bitmap *bitmap,uint64_t bit,int set)
