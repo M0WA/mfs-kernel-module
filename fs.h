@@ -26,7 +26,7 @@ struct mfs_fs_info {
 	struct mfs_mount_opts mount_opts;
     struct mfs_super_block sb;
     uint8_t mount_id;
-    int in_use;
+    int mount_id_used;
 };
 
 #endif

@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <linux/buffer_head.h>
+#include <linux/slab.h>
 
 void mfs_timet_to_timespec(uint64_t t, struct timespec64* ts) {
     ts->tv_sec = t;
@@ -45,7 +46,7 @@ int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t
     return err;
 }
 
-int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t len,void *data)
+int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t len,void const * data)
 {
     struct buffer_head *bh;
     unsigned char *tmp;
@@ -82,4 +83,77 @@ int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_
     sync_dirty_buffer(bh);
     brelse(bh);
     return err;
+}
+
+int mfs_copy_blockdev(struct super_block *sb,sector_t src_block,size_t offset_src,sector_t dst_block,size_t offset_dst,size_t len_bytes)
+{
+    int err;
+    unsigned char *block_buf;
+    size_t buf_byte_base,buf_byte_written,buf_byte_len,src_start_offset,dst_block_count;
+
+    if(unlikely(offset_src > sb->s_blocksize || offset_dst > sb->s_blocksize || len_bytes == 0)) {
+        pr_err("invalid params in mfs_copy_blockdev\n");
+        return -EINVAL; }
+
+    block_buf = kmalloc(sb->s_blocksize * 2, GFP_KERNEL);
+    if(unlikely(!block_buf)) {
+        pr_err("cannot allocate buffer in mfs_copy_blockdev\n");
+        return -ENOMEM; }
+
+    buf_byte_base = 0;
+    buf_byte_len = (sb->s_blocksize - offset_src);
+    src_start_offset = 1;
+    if(likely(buf_byte_len < len_bytes)) {
+        size_t rest = len_bytes - buf_byte_len;
+        buf_byte_len += (rest > sb->s_blocksize ? sb->s_blocksize : rest);
+        src_start_offset++;
+    }
+
+    err = mfs_read_blockdev(sb,src_block,offset_src,buf_byte_len,block_buf);
+    if(unlikely(err)) {
+        pr_err("cannot fill buffer in mfs_copy_blockdev\n");
+        return err; }
+    src_block += src_start_offset;
+
+    buf_byte_written = 0;
+    dst_block_count = DIV_ROUND_UP(len_bytes + offset_dst,sb->s_blocksize);
+    if(unlikely(offset_dst)) {
+        size_t fill_block_size = sb->s_blocksize - offset_dst;
+        err = mfs_write_blockdev(sb,dst_block,offset_dst,fill_block_size,block_buf);
+        if(unlikely(err)) {
+            pr_err("cannot write buffer in mfs_copy_blockdev\n");
+            return err; }
+        buf_byte_written += fill_block_size;
+        dst_block_count--;
+    }
+
+    while(likely(dst_block_count)) {
+        size_t read_pos   = buf_byte_written - buf_byte_base;
+        size_t rest_buf   = buf_byte_len - (buf_byte_written - buf_byte_base);
+        size_t rest_copy  = len_bytes - buf_byte_written;
+        size_t write_size = rest_copy > sb->s_blocksize ? sb->s_blocksize : rest_copy;
+
+        if(likely(rest_buf < write_size)) {
+            memmove(block_buf,&block_buf[read_pos],rest_buf);
+            buf_byte_base += read_pos;
+            buf_byte_len = rest_buf;
+            err = mfs_read_blockdev(sb,src_block,0,write_size,&block_buf[buf_byte_len]);
+            if(unlikely(err)) {
+                pr_err("cannot refill buffer in mfs_copy_blockdev\n");
+                return err; }
+            buf_byte_len += write_size;
+            src_block++;
+            continue; //try again
+        }
+
+        err = mfs_write_blockdev(sb,dst_block,0,write_size,&block_buf[read_pos]);
+        if(unlikely(err)) {
+            pr_err("cannot write copy in mfs_copy_blockdev\n");
+            return err; }
+
+        dst_block_count--;
+    }
+
+    kfree(block_buf);
+    return 0;
 }

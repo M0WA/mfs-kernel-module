@@ -7,7 +7,7 @@ TESTIMAGESIZE := 1048576
 MFSUSERBIN := ../mfs-userspace-tools
 
 obj-m += $(MODULE_FILENAME).o
-$(MODULE_FILENAME)-objs := init.o shutdown.o module.o bitmap.o fs.o mount.o superblock.o record.o inode.o freemap.o dir.o file.o utils.o
+$(MODULE_FILENAME)-objs := init.o shutdown.o module.o bitmap.o fs.o mount.o superblock.o inode.o freemap.o dir.o file.o utils.o
 
 all: clean module
 

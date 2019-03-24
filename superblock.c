@@ -11,7 +11,6 @@
 #include "fs.h"
 #include "inode.h"
 #include "freemap.h"
-#include "dir.h"
 #include "utils.h"
 
 #define MAX_MOUNTS 255
@@ -20,16 +19,23 @@ struct mfs_fs_info mounts[MAX_MOUNTS];
 
 static void mfs_put_super(struct super_block *sb)
 {
+    uint8_t mount_id;
+
     pr_info("Destroying mfs super block\n");
 
-    mfs_destroy_freemap();
+    MFS_SB(sb).mounted = 0;
+    if (unlikely(mfs_save_sb(sb) != 0)) {
+        pr_err("cannot set filesystem as unmounted\n"); }
+    
+    mount_id = MFS_FSINFO(sb)->mount_id;
+    memset(&mounts[mount_id],0,sizeof(struct mfs_fs_info));
 }
 
 static void mfs_destroy_inode(struct inode *inode)
 {
     pr_info("Destroying mfs inode\n");
 
-    if(inode->i_private) {
+    if(likely(inode->i_private)) {
         kfree(inode->i_private);
         inode->i_private = NULL;
     }
@@ -119,7 +125,7 @@ static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi)
     uint8_t m_id;
 
     for(m_id = 0; m_id < MAX_MOUNTS; m_id++) {
-        if(mounts[m_id].in_use == 0) {
+        if(mounts[m_id].mount_id_used == 0) {
             break; }
     }
 
@@ -131,7 +137,7 @@ static int mfs_create_fs_info(char *data, struct mfs_fs_info **fsi)
     }
 
     mounts[m_id].mount_id = m_id;
-    mounts[m_id].in_use = 1;
+    mounts[m_id].mount_id_used = 1;
     *fsi = &mounts[m_id];
     return 0;
 }
@@ -170,7 +176,8 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
 
     if(unlikely(MFS_SB(sb).mounted != 0)) {
         pr_err("filesystem is already mounted\n");
-        return -EIO; }
+        err = -EIO;
+        goto release; }
 
     MFS_SB(sb).mounted = 1;
     err = mfs_save_sb(sb);
@@ -188,11 +195,6 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
     sb->s_magic = MFS_MAGIC_NUMBER;
     sb->s_op = &mfs_super_ops;
     sb->s_time_gran = 1;
-
-    err = mfs_load_freemap(sb);
-    if (unlikely(err != 0)) {
-        pr_err("cannot load freemap\n");
-        goto release; }
 
     err = mfs_read_root_inode(sb);
     if (unlikely(err != 0)) {

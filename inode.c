@@ -10,7 +10,6 @@
 #include "utils.h"
 #include "superblock.h"
 #include "fs.h"
-#include "record.h"
 
 static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mode_t mode);
 
@@ -22,24 +21,26 @@ static int mfs_inode_mkdir(struct inode *dir, struct dentry *dentry, umode_t mod
 
 static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry *child_dentry, unsigned int flags)
 {
+/*
     int err;
     size_t child;
-    struct mfs_record record;
-    uint64_t *children = NULL;    
+    struct mfs_record record;  
     struct inode *i = NULL;
     char *childname = NULL;
-    struct dentry *rc = NULL;
+    uint64_t *children = NULL;
     struct super_block *sb = parent_inode->i_sb;
     struct mfs_inode *p_minode = MFS_INODE(parent_inode);
+*/
 
+    struct dentry *rc = NULL;
     pr_info("Lookup inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
-
+/*
     err = mfs_read_disk_record(sb, &record, &children, p_minode->record_block);
     if(err != 0) {        
         goto release;
     }
 
-    for(child = 0; child < record.dir.children_inodes_count; child++) {
+    for(child = 0; child < record.dir.child_record_count; child++) {
         err = mfs_read_disk_inode(sb, &i, children[child]);
         err = mfs_read_disk_record(sb, &record, NULL, MFS_INODE(i)->record_block);
 
@@ -67,6 +68,7 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
 release:
     if(children) {
         kfree(children); }
+*/
     return rc;
 }
 
@@ -82,90 +84,103 @@ const struct inode_operations mfs_inode_ops = {
 	.mkdir  = mfs_inode_mkdir,
 };
 
+static int mfs_append_inode_child(struct super_block *sb,struct mfs_inode* parent,struct mfs_inode* child) {
+    size_t oldsize,newsize;
+    int err = 0;
+
+    if(unlikely(!S_ISDIR(parent->mode))) {
+        pr_err("can append to directories only");
+        return -EINVAL;
+    }
+
+    oldsize = sizeof(uint64_t) * parent->dir.children;
+    newsize = sizeof(uint64_t) * ++parent->dir.children;
+
+    err = mfs_alloc_freemap(sb,oldsize,newsize,&parent->dir.data_block);
+
+    //TODO: append child inode block to parent child entries
+
+    return err;
+}
+
 static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mode_t mode) 
 {
     struct mfs_inode *m_inode;    
-    struct inode *inode;    
+    struct inode *inode;
     struct super_block *sb;
-    struct mfs_record record;
+    sector_t block_inode;
     int err = 0;
-    sector_t block_inode, block_record;
 
-    memset(&record,0,sizeof(struct mfs_record));
+    sb = dir->i_sb;
 
-    if (!S_ISDIR(mode) && !S_ISREG(mode)) {
+    if(unlikely(!S_ISDIR(mode) && !S_ISREG(mode) && S_ISLNK(mode))) {
         pr_err("could not create %s, invalid mode\n", dentry->d_name.name);
         return -EINVAL;
     }
 
+    if(unlikely(strlen(dentry->d_name.name) >= MFS_MAX_NAME_LEN)) {
+        pr_err("name %s exceeds length limits\n", dentry->d_name.name);
+        return -EINVAL;
+    }
+
     m_inode = kmalloc(sizeof(struct mfs_inode), GFP_KERNEL);
-    if (unlikely(!m_inode)) {
-        pr_err("mfs inode allocation failed\n");
+    if(unlikely(!m_inode)) {
+        pr_err("mfs inode allocation failed for %s\n", dentry->d_name.name);
         return -ENOMEM;
     }
 
-    sb = dir->i_sb;
-    block_inode  = mfs_reserve_freemap(sb,sizeof(struct mfs_inode));
-    block_record = mfs_reserve_freemap(sb,sizeof(struct mfs_record));
-    mfs_save_freemap(sb);
-
-    inode = new_inode(sb);
-    if (!inode) {
+    err = mfs_alloc_freemap(sb,0,sizeof(struct mfs_inode),&block_inode);
+    if(unlikely(err)) {
+        pr_err("cannot alloc free disk space for inode of %s\n", dentry->d_name.name);
 	    err = -ENOMEM;
         goto release; 
     }
 
-    //inode->i_sb = sb;
+    inode = new_inode(sb);
+    if (unlikely(!inode)) {
+        pr_err("cannot create inode for %s\n", dentry->d_name.name);
+	    err = -ENOMEM;
+        goto release; }
     inode->i_op = &mfs_inode_ops;
     inode->i_private = m_inode;
     inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+    inode_init_owner(inode, dir, mode);
 
-    if (S_ISDIR(mode)) {
+    m_inode->mode        = mode;
+    m_inode->inode_no    = inode->i_ino = mfs_get_next_inode_no(sb);
+    m_inode->inode_block = block_inode;
+    m_inode->created     = m_inode->modified = inode->i_atime.tv_nsec;
+    strncpy(m_inode->name,dentry->d_name.name,MFS_MAX_NAME_LEN);
+
+    if(S_ISDIR(mode)) {
 	    inode->i_fop = &mfs_dir_operations;
+
+        m_inode->dir.children   = 0;
+        m_inode->dir.data_block = 0;
     } else if (S_ISREG(mode)) {
 	    inode->i_fop = &mfs_file_operations;
-    } else {
-        err = -EINVAL;
-        goto release;
+
+        m_inode->file.size       = 0;
+        m_inode->file.data_block = 0;
     }
 
-    m_inode->inode_no = inode->i_ino = mfs_get_next_inode_no(sb);
-    m_inode->inode_block  = block_inode;
-    m_inode->record_block = block_record;
-    m_inode->mode = mode;
-    m_inode->created = m_inode->modified = inode->i_atime.tv_nsec;
-/*
-    err = mfs_create_record(dentry,mode,&record);
-    if(err) {
-        goto release;
-    }
-*/
-    //
-    //TODO: write record
-    //
-
-/*
-    err = mfs_append_child_dir(sb,dir,block_record);
-    if(err) {
-        goto release;
-    }
-*/
+    err = mfs_append_inode_child(sb,MFS_INODE(dir),m_inode);
+    if(unlikely(!inode)) {
+        pr_err("cannot append inode %s to parent directory\n", dentry->d_name.name);
+	    err = -ENOMEM;
+        goto release; }
 
 release:
-    if(!err) {
+    if(likely(!err)) {
         err = mfs_save_sb(sb);
-    	inode_init_owner(inode, dir, mode);
         d_add(dentry, inode);
     } else {
-        //TODO: cleanup on error
-        if(m_inode->inode_no) {
-            //unreserve free blocks
-        }
+        //TODO: rollback on error
     }
     return err;
 }
 
-int mfs_read_disk_inode(struct super_block *sb, struct inode **i, uint64_t block)
+int mfs_read_disk_inode(struct super_block *sb, struct inode **i, sector_t block)
 {
     int err;
     struct mfs_inode *m_inode;
@@ -203,7 +218,7 @@ int mfs_read_disk_inode(struct super_block *sb, struct inode **i, uint64_t block
     *i = tmp;
 
 release:
-    if(err != 0) {
+    if(unlikely(err)) {
         kfree(m_inode);
         //destroy inode
     }
