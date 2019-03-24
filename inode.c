@@ -84,11 +84,14 @@ const struct inode_operations mfs_inode_ops = {
 
 static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mode_t mode) 
 {
-    struct mfs_inode *m_inode;
-    struct inode *inode;
+    struct mfs_inode *m_inode;    
+    struct inode *inode;    
     struct super_block *sb;
+    struct mfs_record record;
     int err = 0;
     sector_t block_inode, block_record;
+
+    memset(&record,0,sizeof(struct mfs_record));
 
     if (!S_ISDIR(mode) && !S_ISREG(mode)) {
         pr_err("could not create %s, invalid mode\n", dentry->d_name.name);
@@ -106,29 +109,58 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
     block_record = mfs_reserve_freemap(sb,sizeof(struct mfs_record));
     mfs_save_freemap(sb);
 
-	inode = new_inode(sb);
-	if (!inode) {
-		err = ENOMEM;
-        goto release; }
-	//inode->i_sb = sb;
-	inode->i_op = &mfs_inode_ops;
+    inode = new_inode(sb);
+    if (!inode) {
+	    err = -ENOMEM;
+        goto release; 
+    }
+
+    //inode->i_sb = sb;
+    inode->i_op = &mfs_inode_ops;
     inode->i_private = m_inode;
-	if (S_ISDIR(mode)) {
-		inode->i_fop = &mfs_dir_operations;
-	} else if (S_ISREG(mode)) {
-		inode->i_fop = &mfs_file_operations;
-	}
     inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+
+    if (S_ISDIR(mode)) {
+	    inode->i_fop = &mfs_dir_operations;
+    } else if (S_ISREG(mode)) {
+	    inode->i_fop = &mfs_file_operations;
+    } else {
+        err = -EINVAL;
+        goto release;
+    }
 
     m_inode->inode_no = inode->i_ino = mfs_get_next_inode_no(sb);
     m_inode->inode_block  = block_inode;
     m_inode->record_block = block_record;
     m_inode->mode = mode;
     m_inode->created = m_inode->modified = inode->i_atime.tv_nsec;
+/*
+    err = mfs_create_record(dentry,mode,&record);
+    if(err) {
+        goto release;
+    }
+*/
+    //
+    //TODO: write record
+    //
+
+/*
+    err = mfs_append_child_dir(sb,dir,block_record);
+    if(err) {
+        goto release;
+    }
+*/
 
 release:
-    if(err && m_inode->inode_no) {
-        //unreserve free blocks
+    if(!err) {
+        err = mfs_save_sb(sb);
+    	inode_init_owner(inode, dir, mode);
+        d_add(dentry, inode);
+    } else {
+        //TODO: cleanup on error
+        if(m_inode->inode_no) {
+            //unreserve free blocks
+        }
     }
     return err;
 }

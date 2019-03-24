@@ -9,5 +9,9 @@ extern const struct file_operations mfs_dir_operations;
 struct mfs_dir_record {
     char     name[MFS_MAX_DIRNAME];
     size_t   children_inodes_count;
-    uint64_t children_inode_blocks[0];
 };
+
+struct inode;
+struct super_block;
+
+int mfs_append_child_dir(struct super_block *sb, struct inode *dir,uint64_t childblock);

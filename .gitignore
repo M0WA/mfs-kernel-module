@@ -3,7 +3,9 @@
 *.ko.cmd
 *.ko
 *.o
+*.o.ur-safe
 .tmp_versions
 *.mod.c
 modules.order
 Module.symvers
+test/*

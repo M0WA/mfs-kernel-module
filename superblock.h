@@ -21,9 +21,9 @@ struct mfs_super_block {
     uint32_t block_size;
     uint64_t block_count;
     uint64_t freemap_block;
-    uint64_t inodemap_block;
     uint64_t rootinode_block;
     uint64_t next_ino;
+    uint8_t  mounted;
 };
 
 #ifdef __KERNEL__

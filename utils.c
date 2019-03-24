@@ -77,9 +77,9 @@ int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_
         len -= cpy;
         buf += cpy;
 
-        mark_buffer_dirty(bh);
-        sync_dirty_buffer(bh);
-        brelse(bh);
     }
+    mark_buffer_dirty(bh);
+    sync_dirty_buffer(bh);
+    brelse(bh);
     return err;
 }

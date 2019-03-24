@@ -11,7 +11,6 @@
 #include "fs.h"
 #include "inode.h"
 #include "freemap.h"
-#include "inodemap.h"
 #include "dir.h"
 #include "utils.h"
 
@@ -23,7 +22,6 @@ static void mfs_put_super(struct super_block *sb)
 {
     pr_info("Destroying mfs super block\n");
 
-    mfs_destroy_inodemap();
     mfs_destroy_freemap();
 }
 
@@ -168,7 +166,17 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
 
     err = mfs_read_disk_superblock(sb,fsi);
     if(unlikely(err != 0)) {
-        return err; }
+        goto release; }
+
+    if(unlikely(MFS_SB(sb).mounted != 0)) {
+        pr_err("filesystem is already mounted\n");
+        return -EIO; }
+
+    MFS_SB(sb).mounted = 1;
+    err = mfs_save_sb(sb);
+    if (unlikely(err != 0)) {
+        pr_err("cannot set filesystem as mounted\n");
+        goto release; }
 
     if(unlikely(sb_set_blocksize(sb, MFS_SB(sb).block_size) != MFS_SB(sb).block_size)) {
         pr_err("could not set blocksize\n");
@@ -183,14 +191,12 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
 
     err = mfs_load_freemap(sb);
     if (unlikely(err != 0)) {
-        goto release; }
-
-    err = mfs_load_inodemap(sb);
-    if (unlikely(err != 0)) {
+        pr_err("cannot load freemap\n");
         goto release; }
 
     err = mfs_read_root_inode(sb);
     if (unlikely(err != 0)) {
+        pr_err("cannot load root inode\n");
         goto release; }
 
 release:
