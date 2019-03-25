@@ -29,7 +29,7 @@ test_create_disk_image:
 test_destroy_disk_image:
 	-( $(MFSUSERBIN)/fsck.mfs -vv -d `losetup | grep $(TESTIMAGENAME) | awk '{print $$1}' | tail -n1 )` )
 	-( losetup | grep $(TESTIMAGENAME) | awk '{print $$1}' | xargs losetup -d )
-	$(RM) $(TESTDIR)/$(TESTIMAGENAME)
+#	$(RM) $(TESTDIR)/$(TESTIMAGENAME)
 
 test_mkdir:
 	mkdir -p $(TESTDIR)/mnt/dir $(TESTDIR)/mnt/dir2

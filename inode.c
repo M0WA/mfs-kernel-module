@@ -182,6 +182,11 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
         m_inode->file.data_block = 0;
     }
 
+    err = mfs_write_blockdev(sb,m_inode->inode_block,0,sizeof(struct mfs_inode),m_inode);
+    if(unlikely(err)) {
+        pr_err("cannot write inode %s to disk\n", dentry->d_name.name);
+        goto release; }
+
     err = mfs_append_inode_child(sb,MFS_INODE(dir),m_inode);
     if(unlikely(err)) {
         pr_err("cannot append inode %s to parent directory\n", dentry->d_name.name);
