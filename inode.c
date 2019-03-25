@@ -21,55 +21,57 @@ static int mfs_inode_mkdir(struct inode *dir, struct dentry *dentry, umode_t mod
 
 static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry *child_dentry, unsigned int flags)
 {
-/*
-    int err;
-    size_t child;
-    struct mfs_record record;  
-    struct inode *i = NULL;
-    char *childname = NULL;
-    uint64_t *children = NULL;
+    size_t read_size,child;
+    uint64_t *buf; 
+    int err; 
+    struct mfs_inode *i;
     struct super_block *sb = parent_inode->i_sb;
     struct mfs_inode *p_minode = MFS_INODE(parent_inode);
-*/
 
-    struct dentry *rc = NULL;
     pr_info("Lookup inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
-/*
-    err = mfs_read_disk_record(sb, &record, &children, p_minode->record_block);
-    if(err != 0) {        
-        goto release;
-    }
 
-    for(child = 0; child < record.dir.child_record_count; child++) {
-        err = mfs_read_disk_inode(sb, &i, children[child]);
-        err = mfs_read_disk_record(sb, &record, NULL, MFS_INODE(i)->record_block);
+    read_size = sizeof(uint64_t) * p_minode->dir.children;
 
-        switch(record.type) {
-        case MFS_DIR_RECORD:
-            childname = record.dir.name;
-            break;
-        case MFS_FILE_RECORD:
-            childname = record.file.name;
-            break;
-        default:
-            continue;
-        }
+    buf = kmalloc(read_size,GFP_KERNEL);
+    if(unlikely(!buf)) {
+        pr_err("oom while inode lookup (buffer) %s\n", child_dentry->d_name.name);
+        goto release; }
 
-        if( strncmp(child_dentry->d_name.name,childname,child_dentry->d_name.len) == 0 ) {
+    i = kmalloc(sizeof(struct mfs_inode),GFP_KERNEL);
+    if(unlikely(!i)) {
+        pr_err("oom while inode lookup (inode) %s\n", child_dentry->d_name.name);
+        goto release; }
+
+    err = mfs_read_blockdev(sb,p_minode->dir.data_block,0,read_size,buf);
+    if(unlikely(err)) {
+        pr_err("cannot read from blockdev while inode lookup %s\n", child_dentry->d_name.name);
+        goto release; }
+
+    for(child = 0; child < p_minode->dir.children; child++) {
+        memset(i,0,sizeof(struct mfs_inode));
+        err = mfs_read_blockdev(sb,buf[child],0,sizeof(struct mfs_inode),i);
+
+        if( child_dentry->d_name.len == strlen(i->name) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
+            struct inode *found = 0;
+
             pr_info("Found inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
-            rc = d_splice_alias(i,child_dentry);
-            break;
-        }
 
-        kfree(i);
-        i = NULL;
+            err = mfs_read_disk_inode(sb, &found, buf[child]);
+            if(unlikely(err)) {
+                pr_err("cannot read inode from blockdev while inode lookup %s\n", child_dentry->d_name.name);
+                goto release; }
+
+            d_add(child_dentry, found);
+            goto release;
+        }
     }
-    
+
 release:
-    if(children) {
-        kfree(children); }
-*/
-    return rc;
+    if(buf) {
+        kfree(buf); }
+    if(err && i) {
+        kfree(i); }
+    return NULL;
 }
 
 static int mfs_inode_create(struct inode *dir, struct dentry *dentry, umode_t mode, bool excl)
@@ -113,7 +115,7 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
 
     sb = dir->i_sb;
 
-    if(unlikely(!S_ISDIR(mode) && !S_ISREG(mode) && S_ISLNK(mode))) {
+    if(unlikely( (!S_ISDIR(mode) && !S_ISREG(mode)) || S_ISLNK(mode))) {
         pr_err("could not create %s, invalid mode\n", dentry->d_name.name);
         return -EINVAL;
     }
@@ -189,7 +191,7 @@ int mfs_read_disk_inode(struct super_block *sb, struct inode **i, sector_t block
     *i = NULL;
 
     m_inode = kmalloc(sizeof(struct mfs_inode), GFP_KERNEL);
-    if (unlikely(!m_inode)) {
+    if(unlikely(!m_inode)) {
         pr_err("mfs inode allocation failed\n");
         return -ENOMEM;
     }
@@ -200,7 +202,7 @@ int mfs_read_disk_inode(struct super_block *sb, struct inode **i, sector_t block
     }
 
     tmp = new_inode(sb);
-    if (unlikely(!tmp)) {
+    if(unlikely(!tmp)) {
         pr_err("inode allocation failed\n");
         err = -ENOMEM;
         goto release;
