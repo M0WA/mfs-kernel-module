@@ -22,9 +22,9 @@ static int mfs_inode_mkdir(struct inode *dir, struct dentry *dentry, umode_t mod
 static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry *child_dentry, unsigned int flags)
 {
     size_t read_size,child;
-    uint64_t *buf; 
+    uint64_t *buf = NULL; 
     int err = 0; 
-    struct mfs_inode *i = 0;
+    struct mfs_inode *i = NULL;
     struct super_block *sb = parent_inode->i_sb;
     struct mfs_inode *p_minode = MFS_INODE(parent_inode);
 
@@ -35,7 +35,7 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
         return NULL; }
 
     if(!p_minode->dir.children) {
-        pr_err("parent inode in lookup has no children\n");
+        //pr_info("parent inode in lookup has no children\n");
         return NULL; }
 
     read_size = sizeof(uint64_t) * p_minode->dir.children;
@@ -63,7 +63,7 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
             pr_err("cannot read from blockdev while inode read %s at block %llu\n", child_dentry->d_name.name,buf[child]);
             goto release; }
 
-        pr_info("checking inode for %s => %.*s at block %llu",(i->inode_no ? "/" : i->name),child_dentry->d_name.len,child_dentry->d_name.name,buf[child]);
+        pr_info("checking inode %s for %.*s at block %llu",(i->inode_no == MFS_INODE_NUMBER_ROOT ? "/" : i->name),child_dentry->d_name.len,child_dentry->d_name.name,buf[child]);
 
         if( i->name && child_dentry->d_name.len == strlen(i->name) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
             struct inode *found = 0;
@@ -115,7 +115,7 @@ static int mfs_append_inode_child(struct super_block *sb,struct mfs_inode* paren
     if(unlikely(err)) {
         return err; }
 
-    err = mfs_write_blockdev(sb,parent->dir.data_block,sizeof(struct mfs_inode) + (sizeof(uint64_t) * (parent->dir.children-1) ),sizeof(uint64_t),&child->inode_block);    
+    err = mfs_write_blockdev(sb,parent->dir.data_block,sizeof(uint64_t) * (parent->dir.children-1),sizeof(uint64_t),&child->inode_block);    
     return err;
 }
 
@@ -152,7 +152,7 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
 	    err = -ENOMEM;
         goto release; 
     }
-    pr_err("new inode block is %zu\n", block_inode);
+    //pr_err("new inode block is %zu\n", block_inode);
 
     inode = new_inode(sb);
     if (unlikely(!inode)) {

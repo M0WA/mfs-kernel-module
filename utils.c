@@ -43,8 +43,7 @@ int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t
         if(cpy == 0) {
             break; }
         
-        pr_err("read from blockdev loop at block %.6zu: %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,i,loops,cpy,len);
-
+        //pr_info("read from blockdev loop at block %.6zu: %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,i,loops,cpy,len);
         memcpy(buf,tmp,cpy);
 
         len -= cpy;
@@ -91,7 +90,7 @@ int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_
         if(cpy == 0) {
             break; }
 
-        pr_err("write to blockdev loop at block %.6zu: %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,i,loops,cpy,len);
+        //pr_info("write to blockdev loop at block %.6zu: %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,i,loops,cpy,len);
         memcpy(tmp,buf,cpy);
 
         len -= cpy;

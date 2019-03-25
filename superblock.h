@@ -23,6 +23,7 @@ struct mfs_super_block {
     uint64_t rootinode_block;
     uint64_t next_ino;
     uint8_t  mounted;
+    uint64_t mount_cnt;
 };
 
 #ifdef __KERNEL__

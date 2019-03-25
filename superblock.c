@@ -180,6 +180,7 @@ int mfs_fill_sb(struct super_block *sb, void *data, int silent)
         goto release; }
 
     MFS_SB(sb).mounted = 1;
+    MFS_SB(sb).mount_cnt++;
     err = mfs_save_sb(sb);
     if (unlikely(err != 0)) {
         pr_err("cannot set filesystem as mounted\n");
