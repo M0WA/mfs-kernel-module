@@ -40,6 +40,11 @@ int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t
         if(unlikely(cpy > len)) {
             cpy = len; }
 
+        if(cpy == 0) {
+            break; }
+        
+        pr_err("read from blockdev loop at block %.6zu: %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,i,loops,cpy,len);
+
         memcpy(buf,tmp,cpy);
 
         len -= cpy;
@@ -83,15 +88,19 @@ int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_
         if(unlikely(cpy > len)) {
             cpy = len; }
 
+        if(cpy == 0) {
+            break; }
+
+        pr_err("write to blockdev loop at block %.6zu: %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,i,loops,cpy,len);
         memcpy(tmp,buf,cpy);
 
         len -= cpy;
         buf += cpy;
 
+        mark_buffer_dirty(bh);
+        sync_dirty_buffer(bh);
+        brelse(bh);
     }
-    mark_buffer_dirty(bh);
-    sync_dirty_buffer(bh);
-    brelse(bh);
     return err;
 }
 

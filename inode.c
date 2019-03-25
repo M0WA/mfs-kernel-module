@@ -23,12 +23,20 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
 {
     size_t read_size,child;
     uint64_t *buf; 
-    int err; 
-    struct mfs_inode *i;
+    int err = 0; 
+    struct mfs_inode *i = 0;
     struct super_block *sb = parent_inode->i_sb;
     struct mfs_inode *p_minode = MFS_INODE(parent_inode);
 
     pr_info("Lookup inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
+
+    if(!S_ISDIR(p_minode->mode)) {
+        pr_err("parent inode in lookup is not a directory\n");
+        return NULL; }
+
+    if(!p_minode->dir.children) {
+        pr_err("parent inode in lookup has no children\n");
+        return NULL; }
 
     read_size = sizeof(uint64_t) * p_minode->dir.children;
 
@@ -49,9 +57,15 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
 
     for(child = 0; child < p_minode->dir.children; child++) {
         memset(i,0,sizeof(struct mfs_inode));
-        err = mfs_read_blockdev(sb,buf[child],0,sizeof(struct mfs_inode),i);
 
-        if( child_dentry->d_name.len == strlen(i->name) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
+        err = mfs_read_blockdev(sb,buf[child],0,sizeof(struct mfs_inode),i);
+        if(unlikely(err)) {
+            pr_err("cannot read from blockdev while inode read %s at block %llu\n", child_dentry->d_name.name,buf[child]);
+            goto release; }
+
+        pr_info("checking inode for %s => %.*s at block %llu",(i->inode_no ? "/" : i->name),child_dentry->d_name.len,child_dentry->d_name.name,buf[child]);
+
+        if( i->name && child_dentry->d_name.len == strlen(i->name) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
             struct inode *found = 0;
 
             pr_info("Found inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
@@ -133,11 +147,12 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
 
     block_inode = 0;
     err = mfs_alloc_freemap(sb,0,sizeof(struct mfs_inode),&block_inode);
-    if(unlikely(err)) {
+    if(unlikely(err) || block_inode == 0) {
         pr_err("cannot alloc free disk space for inode of %s\n", dentry->d_name.name);
 	    err = -ENOMEM;
         goto release; 
     }
+    pr_err("new inode block is %zu\n", block_inode);
 
     inode = new_inode(sb);
     if (unlikely(!inode)) {
