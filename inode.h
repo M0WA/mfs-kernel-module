@@ -33,6 +33,7 @@ struct mfs_inode {
     uint64_t created;
     uint64_t modified;
     sector_t inode_block;
+    sector_t parent_inode_block;
     union {
         struct mfs_file_inode file;
         struct mfs_dir_inode  dir;

@@ -63,12 +63,12 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
             pr_err("cannot read from blockdev while inode read %s at block %llu\n", child_dentry->d_name.name,buf[child]);
             goto release; }
 
-        pr_info("checking inode %s for %.*s at block %llu",(i->inode_no == MFS_INODE_NUMBER_ROOT ? "/" : i->name),child_dentry->d_name.len,child_dentry->d_name.name,buf[child]);
+        //pr_err("checking inode %s for %.*s at block %llu %zu == %llu",(i->inode_no == MFS_INODE_NUMBER_ROOT ? "/" : i->name),child_dentry->d_name.len,child_dentry->d_name.name,buf[child]);
 
-        if( i->name && child_dentry->d_name.len == strlen(i->name) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
+        if( i->name && child_dentry->d_name.len == (strlen(i->name)+1) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
             struct inode *found = 0;
 
-            pr_info("Found inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
+            //pr_err("found inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
 
             err = mfs_read_disk_inode(sb, &found, buf[child]);
             if(unlikely(err)) {
@@ -121,13 +121,14 @@ static int mfs_append_inode_child(struct super_block *sb,struct mfs_inode* paren
 
 static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mode_t mode) 
 {
-    struct mfs_inode *m_inode;    
+    struct mfs_inode *m_inode,*m_pinode;    
     struct inode *inode;
     struct super_block *sb;
     sector_t block_inode;
     int err = 0;
 
     sb = dir->i_sb;
+    m_pinode = MFS_INODE(dir);
 
     if(unlikely( (!S_ISDIR(mode) && !S_ISREG(mode)) || S_ISLNK(mode))) {
         pr_err("could not create %s, invalid mode\n", dentry->d_name.name);
@@ -167,6 +168,7 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
     m_inode->mode        = mode;
     m_inode->inode_no    = inode->i_ino = mfs_get_next_inode_no(sb);
     m_inode->inode_block = block_inode;
+    m_inode->parent_inode_block = m_pinode->inode_block;
     m_inode->created     = m_inode->modified = inode->i_atime.tv_nsec;
     strncpy(m_inode->name,dentry->d_name.name,MFS_MAX_NAME_LEN);
 
