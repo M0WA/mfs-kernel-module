@@ -11,12 +11,17 @@ void mfs_timet_to_timespec(uint64_t t, struct timespec64* ts) {
 int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t len,void *data)
 {
     struct buffer_head *bh;
-    unsigned char *tmp;
-    size_t cpy, i;
+    unsigned char *tmp, *buf;
+    size_t cpy, i, blocklen,loops;
     int err = 0;
-    unsigned char *buf = (unsigned char *)data;
-    size_t blocklen = offset + len;
-    size_t loops    = DIV_ROUND_UP(blocklen,sb->s_blocksize);
+
+    if(unlikely(offset >= sb->s_blocksize)) {
+        block += offset/sb->s_blocksize;
+        offset = offset % sb->s_blocksize; }
+
+    buf = (unsigned char *)data;
+    blocklen = offset + len;
+    loops    = DIV_ROUND_UP(blocklen,sb->s_blocksize);
 
     for(i = 0; i <= loops; i++) {
         bh = sb_bread(sb, block + i);
@@ -49,12 +54,17 @@ int mfs_read_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t
 int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_t len,void const * data)
 {
     struct buffer_head *bh;
-    unsigned char *tmp;
+    unsigned char *tmp,*buf;
+    size_t cpy, i,blocklen,loops;
     int err = 0;
-    size_t cpy, i;
-    unsigned char *buf = (unsigned char *)data;
-    size_t blocklen = offset + len;
-    size_t loops    = DIV_ROUND_UP(blocklen,sb->s_blocksize);
+
+    if(unlikely(offset >= sb->s_blocksize)) {
+        block += offset/sb->s_blocksize;
+        offset = offset % sb->s_blocksize; }
+
+    buf      = (unsigned char *)data;
+    blocklen = offset + len;
+    loops    = DIV_ROUND_UP(blocklen,sb->s_blocksize);
 
     for(i = 0; i <= loops; i++) {
         bh = sb_bread(sb, block + i);
@@ -91,9 +101,13 @@ int mfs_copy_blockdev(struct super_block *sb,sector_t src_block,size_t offset_sr
     unsigned char *block_buf;
     size_t buf_byte_base,buf_byte_written,buf_byte_len,src_start_offset,dst_block_count;
 
-    if(unlikely(offset_src > sb->s_blocksize || offset_dst > sb->s_blocksize || len_bytes == 0)) {
-        pr_err("invalid params in mfs_copy_blockdev\n");
-        return -EINVAL; }
+    if(unlikely(offset_src >= sb->s_blocksize)) {
+        src_block += offset_src/sb->s_blocksize;
+        offset_src = offset_src % sb->s_blocksize; }
+
+    if(unlikely(offset_dst >= sb->s_blocksize)) {
+        dst_block += offset_dst/sb->s_blocksize;
+        offset_dst = offset_dst % sb->s_blocksize; }
 
     block_buf = kmalloc(sb->s_blocksize * 2, GFP_KERNEL);
     if(unlikely(!block_buf)) {

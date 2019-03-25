@@ -27,8 +27,8 @@ test_create_disk_image:
 	$(MFSUSERBIN)/mkfs.$(FS_NAME) -v -d `losetup | grep $(TESTIMAGENAME) | awk '{print $$1}' | tail -n1 )`
 
 test_destroy_disk_image:
-#	-( losetup | grep $(TESTIMAGENAME) | awk '{print $$1}' | xargs losetup -d )
-#	$(RM) $(TESTDIR)/$(TESTIMAGENAME)
+	-( losetup | grep $(TESTIMAGENAME) | awk '{print $$1}' | xargs losetup -d )
+	$(RM) $(TESTDIR)/$(TESTIMAGENAME)
 
 test_mkdir:
 	mkdir -p $(TESTDIR)/mnt/dir $(TESTDIR)/mnt/dir2

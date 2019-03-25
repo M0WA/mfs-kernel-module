@@ -90,16 +90,16 @@ static int mfs_append_inode_child(struct super_block *sb,struct mfs_inode* paren
 
     if(unlikely(!S_ISDIR(parent->mode))) {
         pr_err("can append to directories only");
-        return -EINVAL;
-    }
+        return -EINVAL; }
 
     oldsize = sizeof(uint64_t) * parent->dir.children;
     newsize = sizeof(uint64_t) * ++parent->dir.children;
 
     err = mfs_alloc_freemap(sb,oldsize,newsize,&parent->dir.data_block);
+    if(unlikely(err)) {
+        return err; }
 
-    //TODO: append child inode block to parent child entries
-
+    err = mfs_write_blockdev(sb,parent->dir.data_block,sizeof(struct mfs_inode) + (sizeof(uint64_t) * (parent->dir.children-1) ),sizeof(uint64_t),&child->inode_block);    
     return err;
 }
 
@@ -129,6 +129,7 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
         return -ENOMEM;
     }
 
+    block_inode = 0;
     err = mfs_alloc_freemap(sb,0,sizeof(struct mfs_inode),&block_inode);
     if(unlikely(err)) {
         pr_err("cannot alloc free disk space for inode of %s\n", dentry->d_name.name);
@@ -165,9 +166,8 @@ static int mfs_inode_create_generic(struct inode *dir, struct dentry *dentry, mo
     }
 
     err = mfs_append_inode_child(sb,MFS_INODE(dir),m_inode);
-    if(unlikely(!inode)) {
+    if(unlikely(err)) {
         pr_err("cannot append inode %s to parent directory\n", dentry->d_name.name);
-	    err = -ENOMEM;
         goto release; }
 
 release:
