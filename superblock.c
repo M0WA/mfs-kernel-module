@@ -151,6 +151,8 @@ static int mfs_read_root_inode(struct super_block *sb)
     if(unlikely(err != 0)) {
         return err; }
 
+    //pr_err("root inode: %llu data: %lu children: %llu\n",MFS_SB(sb).rootinode_block,MFS_INODE(root)->dir.data_block,MFS_INODE(root)->dir.children);
+
     sb->s_root = d_make_root(root);
     if (unlikely(!sb->s_root)) {
         pr_err("root inode allocation failed\n");

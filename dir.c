@@ -10,7 +10,7 @@
 
 static int mfs_dir_iterate(struct file *filp, struct dir_context *ctx)
 {
-    size_t read_size;
+    size_t read_size, pos;
     int err = 0;
     uint64_t *buf = NULL;
     struct super_block *sb;
@@ -26,11 +26,18 @@ static int mfs_dir_iterate(struct file *filp, struct dir_context *ctx)
     if( unlikely(!S_ISDIR(p_minode->mode)) ) {
         return -ENOTDIR; }
 
+    if(unlikely(!p_minode->dir.children || !p_minode->dir.data_block)) {
+        pr_err("no children: %llu: %s, data: %lu\n",ctx->pos,p_minode->name,p_minode->dir.data_block);
+        return -ENOENT; }
+
     if(unlikely(ctx->pos == 0)) {
-        //pr_err("dir_emit . %llu\n",i.inode_no);
+        //pr_err("dir_emit . %llu\n",p_minode->inode_no);
         dir_emit(ctx, ".", 1, p_minode->inode_no, DT_DIR);
         ctx->pos++;
-    } else if(unlikely(ctx->pos == 1)) {
+        return 0;
+    }
+    
+    if(unlikely(ctx->pos == 1)) {
         memset(&i,0,sizeof(struct mfs_inode));
         err = mfs_read_blockdev(sb,p_minode->parent_inode_block,0,sizeof(struct mfs_inode),&i);
         if(unlikely(err)) {
@@ -39,17 +46,24 @@ static int mfs_dir_iterate(struct file *filp, struct dir_context *ctx)
         //pr_err("dir_emit .. %llu\n",i.inode_no);
         dir_emit(ctx, "..",2, i.inode_no, DT_DIR);
         ctx->pos++;
+        return 0;
+
+        //d_instantiate_new(struct dentry *entry, struct inode *inode)
+        //res = d_splice_alias(inode, entry);
+	    //if (res) {
+		//    dput(found);
+		//    return res;
+	    //}        
     }
 
-    if(unlikely(!p_minode->dir.children || !p_minode->dir.data_block)) {
-        pr_err("no children: %llu\n",ctx->pos);
-        return -ENOENT; }
     if(unlikely(ctx->pos < ctx_offset)) {
         pr_err("invalid ctx->pos: %llu\n",ctx->pos);
         return -ENOENT; }
 
+    pos = ctx->pos - ctx_offset;
+
     //pr_err("dir iter ctx->pos: %llu\n",ctx->pos);
-    if(unlikely( (ctx->pos-ctx_offset) >= p_minode->dir.children)) {
+    if(unlikely( pos >= p_minode->dir.children)) {
         //pr_err("exit dir iter ctx->pos: %llu\n",ctx->pos);
         return 0; }
 
@@ -67,9 +81,9 @@ static int mfs_dir_iterate(struct file *filp, struct dir_context *ctx)
     //pr_err("dir iter children: %llu\n",p_minode->dir.children);
     memset(&i,0,sizeof(struct mfs_inode));
 
-    err = mfs_read_blockdev(sb,buf[ctx->pos-ctx_offset],0,sizeof(struct mfs_inode),&i);
+    err = mfs_read_blockdev(sb,buf[pos],0,sizeof(struct mfs_inode),&i);
     if(unlikely(err)) {
-        pr_err("cannot read from blockdev while inode at block %llu\n",buf[ctx->pos-ctx_offset]);
+        pr_err("cannot read from blockdev while inode at block %llu\n",buf[pos]);
         goto release; }
 
     dtype = DT_UNKNOWN;
@@ -79,7 +93,7 @@ static int mfs_dir_iterate(struct file *filp, struct dir_context *ctx)
         dtype = DT_REG;
     }
 
-    //pr_err("emitting inode %s at block %llu\n",i.name,buf[ctx->pos-ctx_offset]);
+    //pr_err("emitting inode %s at block %llu\n",i.name,buf[pos]);
 	dir_emit(ctx, i.name, MFS_MAX_NAME_LEN,i.inode_no, dtype);
     ctx->pos++;
 

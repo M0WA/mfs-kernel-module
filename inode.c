@@ -27,6 +27,7 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
     struct mfs_inode *i = NULL;
     struct super_block *sb = parent_inode->i_sb;
     struct mfs_inode *p_minode = MFS_INODE(parent_inode);
+    struct dentry *rc = NULL;
 
     pr_info("Lookup inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
 
@@ -63,9 +64,9 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
             pr_err("cannot read from blockdev while inode read %s at block %llu\n", child_dentry->d_name.name,buf[child]);
             goto release; }
 
-        //pr_err("checking inode %s for %.*s at block %llu %zu == %llu",(i->inode_no == MFS_INODE_NUMBER_ROOT ? "/" : i->name),child_dentry->d_name.len,child_dentry->d_name.name,buf[child]);
+        //pr_err("checking inode %s for %.*s at block %llu",(i->inode_no == MFS_INODE_NUMBER_ROOT ? "/" : i->name),child_dentry->d_name.len,child_dentry->d_name.name,buf[child]);
 
-        if( i->name && child_dentry->d_name.len == (strlen(i->name)+1) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
+        if( i->name && child_dentry->d_name.len == strlen(i->name) && strncmp(child_dentry->d_name.name,i->name,child_dentry->d_name.len) == 0 ) {
             struct inode *found = 0;
 
             //pr_err("found inode for %.*s",child_dentry->d_name.len,child_dentry->d_name.name);
@@ -76,6 +77,12 @@ static struct dentry *mfs_inode_lookup(struct inode *parent_inode, struct dentry
                 goto release; }
 
             d_add(child_dentry, found);
+/*
+	        if (d_splice_alias(found, child_dentry)) {
+		        dput(child_dentry);
+	        }
+*/
+            rc = child_dentry;
             goto release;
         }
     }
@@ -114,8 +121,22 @@ static int mfs_append_inode_child(struct super_block *sb,struct mfs_inode* paren
     err = mfs_alloc_freemap(sb,oldsize,newsize,&parent->dir.data_block);
     if(unlikely(err)) {
         return err; }
+    if(unlikely(!parent->dir.data_block)) {
+        pr_err("cannot alloc parent data block");
+        return -EIO; }
 
-    err = mfs_write_blockdev(sb,parent->dir.data_block,sizeof(uint64_t) * (parent->dir.children-1),sizeof(uint64_t),&child->inode_block);    
+    //pr_err("writing child block: %lu, %llu",child->inode_block,parent->dir.children);
+    err = mfs_write_blockdev(sb,parent->dir.data_block,sizeof(uint64_t) * (parent->dir.children-1),sizeof(uint64_t),&child->inode_block);
+    if(unlikely(err)) {
+        pr_err("cannot write child block to parent inode");
+        return -EIO; }
+
+    //pr_err("writing parent block: %lu, %zu",parent->inode_block,sizeof(struct mfs_inode));
+    err = mfs_write_blockdev(sb,parent->inode_block,0,sizeof(struct mfs_inode),parent);
+    if(unlikely(err)) {
+        pr_err("cannot write parent inode");
+        return -EIO; }
+
     return err;
 }
 

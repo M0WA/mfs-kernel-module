@@ -90,7 +90,7 @@ int mfs_write_blockdev(struct super_block *sb,sector_t block,size_t offset,size_
         if(cpy == 0) {
             break; }
 
-        //pr_info("write to blockdev loop at block %.6zu: %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,i,loops,cpy,len);
+        //pr_info("write to blockdev loop at block %.6zu, %lx %.4zu/%.4zu (%.8zu/%.8zu)\n",block + i,(block + i)*sb->s_blocksize,i,loops,cpy,len);
         memcpy(tmp,buf,cpy);
 
         len -= cpy;
