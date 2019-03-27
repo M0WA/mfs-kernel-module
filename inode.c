@@ -107,7 +107,8 @@ const struct inode_operations mfs_inode_ops = {
 	.mkdir  = mfs_inode_mkdir,
 };
 
-static int mfs_append_inode_child(struct super_block *sb,struct mfs_inode* parent,struct mfs_inode* child) {
+static int mfs_append_inode_child(struct super_block *sb,struct mfs_inode* parent,struct mfs_inode* child) 
+{
     size_t oldsize,newsize;
     int err = 0;
 

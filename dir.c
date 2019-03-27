@@ -30,6 +30,16 @@ static int mfs_dir_iterate(struct file *filp, struct dir_context *ctx)
         pr_err("no children: %llu: %s, data: %lu\n",ctx->pos,p_minode->name,p_minode->dir.data_block);
         return -ENOENT; }
 
+    if(unlikely(p_minode->inode_no != MFS_INODE_NUMBER_ROOT && ctx->pos < ctx_offset)) {
+        if(!dir_emit_dots(filp,ctx)) {
+            pr_err("dir_emit error\n");
+        }
+        return 0;        
+    }
+    if(unlikely(p_minode->inode_no == MFS_INODE_NUMBER_ROOT)) {
+        ctx_offset = 0;
+    }
+/*
     if(unlikely(ctx->pos == 0)) {
         //pr_err("dir_emit . %llu\n",p_minode->inode_no);
         dir_emit(ctx, ".", 1, p_minode->inode_no, DT_DIR);
@@ -55,7 +65,7 @@ static int mfs_dir_iterate(struct file *filp, struct dir_context *ctx)
 		//    return res;
 	    //}        
     }
-
+*/
     if(unlikely(ctx->pos < ctx_offset)) {
         pr_err("invalid ctx->pos: %llu\n",ctx->pos);
         return -ENOENT; }

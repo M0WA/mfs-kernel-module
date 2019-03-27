@@ -37,6 +37,7 @@ test_mkdir:
 test_touch:
 	touch $(TESTDIR)/mnt/dir/file
 	touch $(TESTDIR)/mnt/file
+	echo "blablabla" > $(TESTDIR)/mnt/file
 
 test_ls:
 	ls -lah $(TESTDIR)/mnt
@@ -70,17 +71,11 @@ test:
 	$(MAKE) test_insmod_fs 
 	$(MAKE) test_mount_fs 
 	$(MAKE) test_mkdir
-#	-$(MAKE) test_touch
-	-$(MAKE) test_ls
-	$(MAKE) test_umount_fs
-	$(MAKE) test_mount_fs
-	-$(MAKE) test_ls
-	$(MAKE) test_mkdir
-	$(MAKE) test_mkdir
-	-$(MAKE) test_ls
+	$(MAKE) test_touch
+	$(MAKE) test_ls
 	$(MAKE) test_umount_fs
 	$(MAKE) test_cleanup
 	@echo kernel log output is
-	@(dmesg | tail -n40)
+	@(dmesg | tail -n20)
 
 .PHONY: all module clean install test test_destroy_disk_image test_create_disk_image test_insmod_fs test_mount_fs test_umount_fs test_rmmod_fs test_destroy_disk_image test_cleanup_force test_cleanup
