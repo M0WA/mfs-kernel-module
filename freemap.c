@@ -44,7 +44,7 @@ int mfs_alloc_freemap(struct super_block *sb,size_t old_bytes,size_t new_bytes,s
         sector_t append_block = bitmap_find_next_zero_area(freemap.map,freemap.bits,old_block + 1,diff_block_count,0);
 
         if( append_block != (old_block + 1) ){
-            pr_info("memory is not big enough, moving to different area\n");
+            pr_info("memory is not big enough, moving to different area: new: %lu, old: %lu\n",append_block,old_block);
 
             *block = bitmap_find_next_zero_area(freemap.map,freemap.bits,0,new_block_count,0);
             bitmap_set(freemap.map,*block,diff_block_count);

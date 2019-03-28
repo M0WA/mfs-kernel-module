@@ -37,7 +37,12 @@ test_mkdir:
 test_touch:
 	touch $(TESTDIR)/mnt/dir/file
 	touch $(TESTDIR)/mnt/file
+
+test_write:
 	echo "blablabla" > $(TESTDIR)/mnt/file
+
+test_read:
+	cat $(TESTDIR)/mnt/file
 
 test_ls:
 	ls -lah $(TESTDIR)/mnt
@@ -73,6 +78,9 @@ test:
 	$(MAKE) test_mkdir
 	$(MAKE) test_touch
 	$(MAKE) test_ls
+	$(MAKE) test_write
+	$(MAKE) test_ls
+	$(MAKE) test_read
 	$(MAKE) test_umount_fs
 	$(MAKE) test_cleanup
 	@echo kernel log output is
